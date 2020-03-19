@@ -4,7 +4,7 @@ service cloud.firestore {
 
     // Users can access only their data
     match /users/{userId} {
-      allow read, write: if request.auth.uid == userId;
+      allow read: if request.auth.uid == userId;
     }
   }
 }
