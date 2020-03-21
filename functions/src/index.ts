@@ -3,8 +3,8 @@ import * as t from 'io-ts'
 import {isLeft} from "fp-ts/lib/Either";
 import * as admin from 'firebase-admin';
 import {CollectionReference} from "@google-cloud/firestore";
-import {Guid} from "guid-typescript";
 import {PathReporter} from "io-ts/lib/PathReporter";
+import {randomBytes} from 'crypto';
 
 const Request = t.type({
     platform: t.string,
@@ -15,16 +15,16 @@ const Request = t.type({
 });
 
 const MAX_BUID_RETRIES = 10;
-const BUID_LENGTH = 10;
+const BUID_BYTE_LENGTH = 10;
 
 // Initialize Firebase
 admin.initializeApp({
     credential: admin.credential.applicationDefault()
 });
 
-async function generateGuid(collection: CollectionReference) {
+async function generateBuid(collection: CollectionReference) {
     for (let i = 0; i < MAX_BUID_RETRIES; i++) {
-        const buid = Guid.create().toString().substring(14).replace(/-/g, "").substr(0, BUID_LENGTH);
+        const buid = randomBytes(BUID_BYTE_LENGTH).toString('hex');
         const res = await collection.where("buid", "==", buid).get();
 
         // Note: small data race here, ignored for now
@@ -68,7 +68,7 @@ export const createUser = functions.region('europe-west2').https.onCall(async (d
         console.log(`Updating user ${uid}`);
         await document.update({...payload});
     } else {
-        buid = await generateGuid(collection);
+        buid = await generateBuid(collection);
         if (buid === null) {
             throw new functions.https.HttpsError('unavailable', 'BUID could not be generated');
         }
