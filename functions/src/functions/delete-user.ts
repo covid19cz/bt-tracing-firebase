@@ -12,7 +12,9 @@ export const deleteUserCallable = functions.region(REGION).https.onCall(async (d
     const fuid = context.auth.uid;
     try {
         console.log(`Erasing user ${fuid}`);
-        await admin.auth().deleteUser(fuid);
+        const auth = admin.auth();
+        await auth.revokeRefreshTokens(fuid);
+        await auth.deleteUser(fuid);
     } catch (error) {
         console.log(`Erasing user ${fuid} failed: ${error}`);
         throw new functions.https.HttpsError("unavailable", "Nepodařilo se smazat uživatele");
