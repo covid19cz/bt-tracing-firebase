@@ -6,12 +6,10 @@ import {
     loadAwsWriteBucket
 } from "../settings";
 import {format, parseStream, parseString} from "fast-csv";
-import {DeviceDetails, PhoneProximityData, ProximityFile, ProximityRecord} from "../lib/proximity";
+import {DeviceMap, PhoneProximityData, ProximityFile, ProximityRecord} from "../lib/proximity";
 import {AWSBucket} from "../lib/aws";
-import {FIRESTORE_CLIENT, getFuidFromPhone} from "../lib/database";
+import {FIRESTORE_CLIENT, getFuidFromPhone, getPhoneFromFuid} from "../lib/database";
 import {STORAGE_CLIENT} from "../lib/storage";
-
-type DeviceMap = { [key: string]: DeviceDetails };
 
 async function getFileIfExists(bucket: AWSBucket, file: string, headOnly: boolean = false): Promise<S3.Types.GetObjectOutput | null> {
     try {
@@ -73,15 +71,15 @@ async function getProximityRecord(fuid: string, buid: string): Promise<Proximity
     };
 }
 
-function parseBuidCSVRecords(stream: NodeJS.ReadableStream, metBuids: Set<string>): Promise<ProximityRecord[]> {
+function parseBuidCSVRecords(stream: NodeJS.ReadableStream, metTuids: Set<string>): Promise<ProximityRecord[]> {
     return new Promise((resolve, reject) => {
         const encounters: ProximityRecord[] = [];
         stream
             .on('error', error => reject(error))
             .on('data', row => {
-                const buid = row["buid"];
-                if (buid !== undefined) {
-                    metBuids.add(buid);
+                const tuid = row["tuid"];
+                if (tuid !== undefined) {
+                    metTuids.add(tuid);
                     encounters.push(row);
                 }
             })
@@ -107,7 +105,7 @@ async function getPhoneRecords(phone: string, bucket: AWSBucket): Promise<PhoneP
     const result: PhoneProximityData = {
         phone,
         devices: {},
-        metBuids: new Set()
+        metTuids: new Set()
     };
 
     const fuid = await getFuidFromPhone(phone);
@@ -133,7 +131,7 @@ async function getPhoneRecords(phone: string, bucket: AWSBucket): Promise<PhoneP
             try {
                 result.devices[buid] = await parseBuidCSVRecords(parseStream(file.stream, {
                     headers: true,
-                }), result.metBuids);
+                }), result.metTuids);
             } catch (e) {
                 console.error(`Error during BUID ${buid} CSV parsing: ${e}`);
             }
@@ -142,41 +140,59 @@ async function getPhoneRecords(phone: string, bucket: AWSBucket): Promise<PhoneP
     return result;
 }
 
-async function buildDeviceMap(buids: Set<string>): Promise<DeviceMap> {
+async function buildDeviceMap(buidSet: Set<string>, tuidSet: Set<string>): Promise<DeviceMap> {
     const registrations = FIRESTORE_CLIENT.collection("registrations");
     const users = FIRESTORE_CLIENT.collection("users");
+    const tuidCollection = FIRESTORE_CLIENT.collection("tuids");
 
-    const refs = [...buids.values()].map(buid => registrations.doc(buid));
-    const fuidRefs = [];
-    const pendingBuids: { [key: string]: Omit<DeviceDetails, "phone"> & { buid: string } } = {};
-    const map: DeviceMap = {};
-    if (refs.length === 0) return map;
+    const map: DeviceMap = {
+        buidToDevice: {},
+        tuidToPhone: {}
+    };
 
-    for (const document of await FIRESTORE_CLIENT.getAll(...refs)) {
-        const buid = document.id;
-        if (document.exists) {
-            const fuid = document.get("fuid");
-            fuidRefs.push(users.doc(fuid));
-            pendingBuids[fuid] = {
-                buid,
-                manufacturer: document.get("manufacturer"),
-                model: document.get("model"),
-                platform: document.get("platform"),
-                platformVersion: document.get("platformVersion")
-            };
+    const buidRefs = [...buidSet.values()].map(buid => registrations.doc(buid));
+    if (buidRefs.length > 0) {
+        for (const document of await FIRESTORE_CLIENT.getAll(...buidRefs)) {
+            const buid = document.id;
+            if (document.exists) {
+                map.buidToDevice[buid] = {
+                    manufacturer: document.get("manufacturer"),
+                    model: document.get("model"),
+                    platform: document.get("platform"),
+                    platformVersion: document.get("platformVersion")
+                };
+            }
         }
     }
-    if (fuidRefs.length === 0) return map;
 
-    for (const document of await FIRESTORE_CLIENT.getAll(...fuidRefs)) {
-        const buidData = pendingBuids[document.id];
-        if (document.exists) {
-            map[buidData.buid] = {
-                ...buidData,
-                phone: document.get("phoneNumber")
-            };
+    const fuidSet = new Set<string>();
+    // FUID -> TUID
+    const pendingTuids: { [key: string]: string } = {};
+
+    const tuidRefs = [...tuidSet.values()].map(tuid => tuidCollection.doc(tuid));
+    if (tuidRefs.length > 0) {
+        if (tuidRefs.length > 0) {
+            for (const document of await FIRESTORE_CLIENT.getAll(...tuidRefs)) {
+                const tuid = document.id;
+                if (document.exists) {
+                    const fuid = document.get("fuid");
+                    pendingTuids[fuid] = tuid;
+                    fuidSet.add(fuid);
+                }
+            }
         }
     }
+
+    const records = await Promise.all([...fuidSet.values()].map(async fuid => {
+        const phone = (await getPhoneFromFuid(fuid)) ?? "";
+        return {phone, fuid};
+    }));
+
+    for (const {fuid, phone} of records) {
+        const tuid = pendingTuids[fuid];
+        map.tuidToPhone[tuid] = phone;
+    }
+
     return map;
 }
 
@@ -194,13 +210,16 @@ async function uploadPhone(bucket: AWSBucket, phoneData: PhoneProximityData, dev
     const stream = format({headers: true});
 
     for (const buid of buids) {
+        const deviceDetails = deviceMap.buidToDevice[buid] ?? {};
+        const {model, manufacturer, platform, platformVersion} = deviceDetails;
+
         for (const row of phoneData.devices[buid]) {
-            const neighbourBuid = row["buid"];
-            const deviceDetails = deviceMap[neighbourBuid] ?? {};
-            const {model, manufacturer, platform, platformVersion} = deviceDetails;
+            const neighbourTuid = row.tuid;
+            const phone = deviceMap.tuidToPhone[neighbourTuid];
             row["buid"] = buid;
-            row["phone"] = deviceDetails.phone ?? "";
+            row["phone"] = phone ?? "";
             row["device"] = model !== undefined ? `${manufacturer} ${model} ${platform} ${platformVersion}` : "";
+            delete row["tuid"];
             stream.write(row);
         }
     }
@@ -215,15 +234,21 @@ async function uploadPhone(bucket: AWSBucket, phoneData: PhoneProximityData, dev
 
 async function uploadPhones(bucket: AWSBucket, phones: string[]) {
     const records = (await Promise.all(phones.map((phone) => getPhoneRecords(phone, bucket)))).filter(rec => rec !== null) as PhoneProximityData[];
-    const buidSet = new Set<string>();
-    for (const record of records) {
-        for (const buid of record.metBuids) {
-            buidSet.add(buid);
-        }
-    }
 
-    const deviceMap = await buildDeviceMap(buidSet);
-    await Promise.all(records.map(record => uploadPhone(bucket, record, deviceMap)));
+    if (records.length > 0) {
+        const tuidSet = new Set<string>();
+        const buidSet = new Set<string>();
+        for (const record of records) {
+            for (const buid of Object.keys(record.devices)) {
+                buidSet.add(buid);
+            }
+            for (const tuid of record.metTuids) {
+                tuidSet.add(tuid);
+            }
+        }
+        const deviceMap = await buildDeviceMap(buidSet, tuidSet);
+        await Promise.all(records.map(record => uploadPhone(bucket, record, deviceMap)));
+    }
 }
 
 export async function sendProximityToAws() {

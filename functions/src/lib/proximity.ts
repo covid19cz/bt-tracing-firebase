@@ -1,5 +1,5 @@
 export interface ProximityRecord {
-    buid: string;
+    tuid: string;
 
     [key: string]: string;
 }
@@ -7,13 +7,17 @@ export interface ProximityRecord {
 export interface PhoneProximityData {
     phone: string;
     devices: { [key: string]: DeviceProximityData };
-    metBuids: Set<string>;
+    metTuids: Set<string>;
 }
 
 export type DeviceProximityData = ProximityRecord[];
 
+export interface DeviceMap {
+    buidToDevice: {[key: string]: DeviceDetails},
+    tuidToPhone: {[key: string]: string}
+}
+
 export interface DeviceDetails {
-    phone: string;
     manufacturer: string;
     model: string;
     platform: string;

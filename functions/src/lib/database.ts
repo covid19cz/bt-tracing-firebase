@@ -19,3 +19,12 @@ export async function getFuidFromPhone(phone: string): Promise<string | null> {
         return null;
     }
 }
+export async function getPhoneFromFuid(fuid: string): Promise<string | null> {
+    try {
+        const user = await FIREBASE_AUTH_CLIENT.getUser(fuid);
+        return user?.phoneNumber ?? null;
+    }
+    catch (error) {
+        return null;
+    }
+}
