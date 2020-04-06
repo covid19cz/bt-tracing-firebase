@@ -1,4 +1,3 @@
-/* tslint:disable no-implicit-dependencies */
 import {spawn} from "child_process";
 import * as fftest from "firebase-functions-test";
 import {waitUntilUsed} from "tcp-port-used";

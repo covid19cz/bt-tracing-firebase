@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import {deleteUploads} from "../lib/storage";
 import {buildCloudFunction} from "../settings";
 import {FIRESTORE_CLIENT} from "../lib/database";
+import {deleteBuid} from "../functions/delete-buid";
 import UserRecord = admin.auth.UserRecord;
 
 async function deleteAllUploads(fuid: string) {
@@ -20,15 +21,11 @@ async function deleteAllUploads(fuid: string) {
 
 async function deleteRegistrations(fuid: string) {
     const registrations = FIRESTORE_CLIENT.collection("registrations");
+    console.log(`Deleting user ${fuid} registrations`);
 
     try {
-        console.log(`Deleting user ${fuid} registrations`);
         const documents = await registrations.where("fuid", "==", fuid).select().get();
-        for (const document of documents.docs) {
-            if (document.exists) {
-                await document.ref.delete();
-            }
-        }
+        await Promise.all(documents.docs.map(doc => deleteBuid(fuid, doc.id)));
     } catch (error) {
         console.error(`Failed deleting user ${fuid} registrations: ${error}`);
     }
@@ -36,6 +33,8 @@ async function deleteRegistrations(fuid: string) {
 
 async function deleteUserEntry(fuid: string) {
     const users = FIRESTORE_CLIENT.collection("users");
+    const userRef = users.doc(fuid);
+    if (!(await userRef.get()).exists) return;
 
     try {
         console.log(`Deleting user ${fuid} database entry`);

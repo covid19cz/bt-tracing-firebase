@@ -5,6 +5,7 @@ import {firestore} from "firebase-admin";
 import * as functions from "firebase-functions";
 import {createAuth} from "./common";
 import {MAX_BUIDS_PER_USER} from "../src/settings";
+import {expect} from "chai";
 
 export const registerBuidMock = FIREBASE_TEST.wrap(registerBuid);
 
@@ -70,6 +71,22 @@ describe("registerBuid", () => {
         equal(doc.get("platformVersion"), data.platformVersion);
         equal(doc.get("locale"), data.locale);
         equal(doc.get("pushRegistrationToken"), data.pushRegistrationToken);
+    });
+    it("should create TUIDs", async () => {
+        const fuid = "uid1";
+        const phone = "123456789";
+        const data = makeDeviceData();
+        const response = await registerBuidMock(data, createAuth(fuid, phone));
+        const buid = response.buid;
+        const tuids = response.tuids;
+
+        const dbTuids = [];
+        for (const doc of (await firestore().collection("tuids").where("buid", "==", buid).get()).docs) {
+            equal(doc.get("buid"), buid);
+            equal(doc.get("fuid"), fuid);
+            dbTuids.push(doc.id);
+        }
+        expect(tuids).to.have.members(dbTuids);
     });
     it("should support multiple BUIDs per user", async () => {
         const fuid = "uid1";

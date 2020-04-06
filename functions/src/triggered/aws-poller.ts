@@ -126,6 +126,8 @@ async function getPhoneRecords(phone: string, bucket: AWSBucket): Promise<PhoneP
         return null;
     }
 
+    console.log(`Getting records for ${phone}`);
+
     for (const {buid, file} of buids) {
         if (file !== null) {
             try {

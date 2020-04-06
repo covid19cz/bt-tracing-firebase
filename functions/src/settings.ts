@@ -6,6 +6,7 @@ export const FIREBASE_REGION = "europe-west1";
 export const GCP_PROJECT = process.env.GCP_PROJECT as string;
 
 export const MAX_BUIDS_PER_USER = 50;
+export const INITIAL_TUIDS_PER_BUID = 50;
 export const AWS_PHONE_CSV_PATH = "msisdn.csv";
 
 const SECRET_CLIENT = new SecretManagerServiceClient();

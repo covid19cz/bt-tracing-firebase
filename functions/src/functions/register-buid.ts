@@ -1,7 +1,7 @@
 import * as functions from "firebase-functions";
 import * as t from "io-ts"
 import * as admin from "firebase-admin";
-import {buildCloudFunction, MAX_BUIDS_PER_USER} from "../settings";
+import {buildCloudFunction, INITIAL_TUIDS_PER_BUID, MAX_BUIDS_PER_USER} from "../settings";
 import {CollectionReference} from "@google-cloud/firestore";
 import {randomBytes} from "crypto";
 import {parseRequest} from "../lib/request";
@@ -9,6 +9,7 @@ import {FIRESTORE_CLIENT} from "../lib/database";
 
 const MAX_BUID_RETRIES = 10;
 const BUID_BYTE_LENGTH = 10;
+const TUID_BYTE_LENGTH = 10;
 
 function getUnixTimestamp(): number {
     return Math.floor(Date.now() / 1000);
@@ -23,9 +24,12 @@ const RequestSchema = t.type({
     pushRegistrationToken: t.string
 });
 
-function generateBuid(): string {
-    return randomBytes(BUID_BYTE_LENGTH).toString("hex");
+function generateBytes(count: number): string {
+    return randomBytes(count).toString("hex");
 }
+
+const generateBuid = () => generateBytes(BUID_BYTE_LENGTH);
+const generateTuid = () => generateBytes(TUID_BYTE_LENGTH);
 
 function isAlreadyExistsError(e: { code: number }): boolean {
     return "code" in e && e.code === 6;
@@ -89,6 +93,35 @@ async function registerBuid(
     throw new functions.https.HttpsError("deadline-exceeded", "Nepodařilo se vygenerovat BUID");
 }
 
+async function createTuids(
+    client: admin.firestore.Firestore,
+    tuidCollection: CollectionReference,
+    fuid: string,
+    buid: string,
+    count: number
+): Promise<string[]> {
+    const batch = client.batch();
+    const tuids = [];
+
+    for (let i = 0; i < count; i++) {
+        const tuid = generateTuid();
+        batch.create(tuidCollection.doc(tuid), {
+            buid,
+            fuid,
+            createdAt: getUnixTimestamp()
+        });
+        tuids.push(tuid);
+    }
+
+    try {
+        await batch.commit();
+        return tuids;
+    } catch (e) {
+        console.log(`Error during TUID generation: ${e} for buid ${buid}`);
+        throw new functions.https.HttpsError("internal", "Nepodařilo se vygenerovat TUID");
+    }
+}
+
 export const registerBuidCallable = buildCloudFunction().https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Chybějící autentizace");
@@ -101,7 +134,8 @@ export const registerBuidCallable = buildCloudFunction().https.onCall(async (dat
     const payload = parseRequest(RequestSchema, data);
 
     const fuid = context.auth.uid;
-    const users = FIRESTORE_CLIENT.collection("users");
+    const client = FIRESTORE_CLIENT;
+    const users = client.collection("users");
 
     const registered = await registerUserIfNotExists(users, fuid);
     if (registered) {
@@ -112,7 +146,9 @@ export const registerBuidCallable = buildCloudFunction().https.onCall(async (dat
         throw new functions.https.HttpsError("resource-exhausted", "Na Vašem účtu je již příliš mnoho registrovaných zařízení");
     }
 
-    const buid = await registerBuid(FIRESTORE_CLIENT, users, FIRESTORE_CLIENT.collection("registrations"), fuid, payload);
+    const buid = await registerBuid(client, users, client.collection("registrations"), fuid, payload);
     console.log(`Registered BUID ${buid} for user ${fuid}`);
-    return {buid};
+
+    const tuids = await createTuids(client, client.collection("tuids"), fuid, buid, INITIAL_TUIDS_PER_BUID);
+    return {buid, tuids};
 });

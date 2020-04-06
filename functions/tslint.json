@@ -111,5 +111,8 @@
     "trailing-comma": {"severity": "warning"}
   },
 
-  "defaultSeverity": "error"
+  "defaultSeverity": "error",
+  "linterOptions": {
+    "exclude": ["test/**"]
+  }
 }
