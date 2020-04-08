@@ -19,7 +19,17 @@ jobs:
         run: cd functions && npm test
       - name: Deploy to Firebase development
         if: github.ref == 'refs/heads/develop'
-        run: firebase deploy -P dev --token=${{ secrets.FIREBASE_DEV_TOKEN }} --non-interactive
+        run: |
+          printenv GOOGLE_JSON > creds.json
+          firebase deploy -P dev --non-interactive
+        env:
+          GOOGLE_JSON: ${{ secrets.FIREBASE_DEV_JSON }}
+          GOOGLE_APPLICATION_CREDENTIALS: creds.json
       - name: Deploy to Firebase production
         if: github.ref == 'refs/heads/master'
-        run: firebase deploy -P prod --token=${{ secrets.FIREBASE_PROD_TOKEN }} --non-interactive
+        run: |
+          printenv GOOGLE_JSON > creds.json
+          firebase deploy -P prod --non-interactive
+        env:
+          GOOGLE_JSON: ${{ secrets.FIREBASE_PROD_JSON }}
+          GOOGLE_APPLICATION_CREDENTIALS: creds.json
