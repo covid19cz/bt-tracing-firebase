@@ -66,12 +66,15 @@ async function deleteUpload(req: https.Request) {
         console.log(`Upload at ${path} was rewritten at ${created}, not deleting yet`);
         return;
     }
-
-    await bucket.deleteFiles({
-        prefix: path,
-        force: true
-    });
-    console.log(`Deleted upload at ${path}`);
+    try {
+        await bucket.deleteFiles({
+            prefix: path,
+            force: true
+        });
+        console.log(`Upload at ${path} succesfully deleted`);
+    } catch (error) {
+        console.error(`Cannot delete the uploaded file at ${path}, ${error}`);
+    }
 }
 
 /**
