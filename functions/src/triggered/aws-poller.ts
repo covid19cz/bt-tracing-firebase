@@ -142,7 +142,6 @@ async function getPhoneRecords(phone: string, bucket: AWSBucket): Promise<PhoneP
 
 async function buildDeviceMap(buidSet: Set<string>, tuidSet: Set<string>): Promise<DeviceMap> {
     const registrations = FIRESTORE_CLIENT.collection("registrations");
-    const users = FIRESTORE_CLIENT.collection("users");
     const tuidCollection = FIRESTORE_CLIENT.collection("tuids");
 
     const map: DeviceMap = {
