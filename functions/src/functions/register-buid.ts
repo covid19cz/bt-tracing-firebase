@@ -160,7 +160,7 @@ export const registerBuidCallable = buildCloudFunction().https.onCall(async (dat
 
     const registered = await registerUserIfNotExists(users, fuid, unverifiedPhoneNumber);
     if (registered) {
-        console.log(`Registered user ${fuid}`);
+        console.log(`Registered user ${fuid}, phoneNumberStatus=${hasUnverifiedPhone? 'UNVERIFIED' : 'VERIFIED'}`);
     }
 
     if (!(await hasSpaceforBuids(users, fuid, MAX_BUIDS_PER_USER))) {
