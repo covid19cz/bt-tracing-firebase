@@ -5,19 +5,33 @@ import * as t from "io-ts";
 import {parseRequest} from "../lib/request";
 import {FIRESTORE_CLIENT, isBuidOwnedByFuid} from "../lib/database";
 import {deleteUploads} from "../lib/storage";
+import WriteBatch = FirebaseFirestore.WriteBatch;
 
 const MAX_OPS_IN_BATCH = 500;
 
-export async function deleteBuid(fuid: string, buid: string) {
+async function removeBuidFromUser(fuid: string, batch: WriteBatch) {
+    const users = FIRESTORE_CLIENT.collection("users");
+    const userRef = users.doc(fuid);
+    const user = await userRef.get();
+
+    if (user.get("registrationCount") === 1) {
+        batch.delete(userRef, {
+            lastUpdateTime: user.updateTime
+        });
+    }
+    else {
+        batch.update(userRef, {
+            registrationCount: firestore.FieldValue.increment(-1)
+        });
+    }
+}
+
+export async function deleteBuid(fuid: string, buid: string, modifyUserTable: boolean = true) {
     const registrations = FIRESTORE_CLIENT.collection("registrations");
     const buidDoc = await registrations.doc(buid).get();
     const buidLastUpdateTime = buidDoc.updateTime;
 
-    const users = FIRESTORE_CLIENT.collection("users");
     const tuids = FIRESTORE_CLIENT.collection("tuids");
-    const userRef = users.doc(fuid);
-    const user = await userRef.get();
-    const userUpdateTime = user.updateTime;
 
     let tuidRefs = (await tuids.where("buid", "==", buid).get()).docs;
 
@@ -29,15 +43,9 @@ export async function deleteBuid(fuid: string, buid: string) {
 
     const batch = FIRESTORE_CLIENT.batch();
 
-    if (user.get("registrationCount") === 1) {
-        batch.delete(userRef, {
-            lastUpdateTime: userUpdateTime
-        });
-    }
-    else {
-        batch.update(userRef, {
-            registrationCount: firestore.FieldValue.increment(-1)
-        });
+    if (modifyUserTable)
+    {
+        await removeBuidFromUser(fuid, batch);
     }
 
     for (const doc of tuidRefs) {

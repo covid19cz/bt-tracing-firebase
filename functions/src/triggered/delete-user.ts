@@ -25,7 +25,7 @@ async function deleteRegistrations(fuid: string) {
 
     try {
         const documents = await registrations.where("fuid", "==", fuid).select().get();
-        await Promise.all(documents.docs.map(doc => deleteBuid(fuid, doc.id)));
+        await Promise.all(documents.docs.map(doc => deleteBuid(fuid, doc.id, false)));
     } catch (error) {
         console.error(`Failed deleting user ${fuid} registrations: ${error}`);
     }
