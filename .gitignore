@@ -63,3 +63,11 @@ node_modules/
 
 # dotenv environment variables file
 .env
+
+# terraform
+creds/
+planfile
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
