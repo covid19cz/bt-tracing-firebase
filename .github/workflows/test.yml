@@ -13,3 +13,5 @@ jobs:
         run: sudo npm install -g firebase-tools typescript
       - name: Test
         run: cd functions && npm test
+        env:
+          TS_NODE_FILES: true

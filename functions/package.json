@@ -24,7 +24,8 @@
     "firebase-admin": "^8.10.0",
     "firebase-functions": "^3.6.0",
     "fp-ts": "^2.5.3",
-    "io-ts": "^2.1.2"
+    "io-ts": "^2.1.2",
+    "maskdata": "^1.0.17"
   },
   "devDependencies": {
     "@firebase/testing": "^0.18.1",

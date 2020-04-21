@@ -12,7 +12,8 @@ locals {
 
   delete_user_roles = [
     "roles/cloudfunctions.serviceAgent",
-    "roles/firebaseauth.admin"
+    "roles/firebaseauth.admin",
+    "roles/datastore.viewer"
   ]
 
   delete_buid_roles = [
