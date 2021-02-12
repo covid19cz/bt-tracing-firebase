@@ -6,7 +6,13 @@ import {
     loadAwsWriteBucket
 } from "../settings";
 import {format, parseStream, parseString} from "fast-csv";
-import {DeviceMap, PhoneProximityData, ProximityFile, ProximityRecord} from "../lib/proximity";
+import {
+    DeviceMap,
+    normalizeRssi,
+    PhoneProximityData,
+    ProximityFile,
+    ProximityRecord
+} from "../lib/proximity";
 import {AWSBucket} from "../lib/aws";
 import {FIRESTORE_CLIENT, getFuidFromPhone, getPhoneFromFuid} from "../lib/database";
 import {STORAGE_CLIENT} from "../lib/storage";
@@ -218,6 +224,7 @@ async function uploadPhone(bucket: AWSBucket, phoneData: PhoneProximityData, dev
             row["buid"] = buid;
             row["phone"] = phone ?? "";
             row["device"] = model !== undefined ? `${manufacturer} ${model} ${platform} ${platformVersion}` : "";
+            row["normalizedRssi"] = normalizeRssi(row["avgRssi"], deviceDetails);
             delete row["tuid"];
             stream.write(row);
         }
